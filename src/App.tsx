@@ -1,8 +1,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
-import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
@@ -15,9 +15,12 @@ import Wallet from './pages/Wallet';
 import TransactionHistory from './pages/TransactionHistory';
 import MerchantPortal from './pages/MerchantPortal';
 import Login from './pages/Login';
+import Signup from './pages/Signup';
 import KYC from './pages/KYC';
+import OrderConfirmation from './pages/OrderConfirmation';
+import FiatPayment from './pages/FiatPayment';
+import ErrorBoundary from './components/ErrorBoundary'; // Import the error boundary
 
-// Use environment variable for Google Client ID
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 const App: React.FC = () => {
@@ -39,7 +42,17 @@ const App: React.FC = () => {
                   <Route path="/wallet" element={<Wallet />} />
                   <Route path="/transactions" element={<TransactionHistory />} />
                   <Route path="/merchant" element={<MerchantPortal />} />
-                  <Route path="/login" element={<Login />} />
+                  <Route path="/order-confirmation" element={<OrderConfirmation />} /> {/* Add this route */}
+                  <Route path="/payment/fiat" element={<FiatPayment />} /> {/* Add this route */}
+                  <Route
+                    path="/login"
+                    element={
+                      <ErrorBoundary>
+                        <Login />
+                      </ErrorBoundary>
+                    }
+                  />
+                  <Route path="/signup" element={<Signup />} />
                   <Route path="/kyc" element={<KYC />} />
                 </Routes>
               </main>

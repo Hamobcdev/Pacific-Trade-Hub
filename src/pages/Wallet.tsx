@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Wallet as WalletIcon, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 
 const Wallet: React.FC = () => {
-  const [balances, setBalances] = useState({
+  const [balances] = useState({
     wst: 1000.50,
     usdc: 200.00,
   });
@@ -41,8 +41,8 @@ const Wallet: React.FC = () => {
         </div>
 
         {/* Transaction History */}
-        <div className="md:col-span-2 bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold mb-4">Recent Transactions</h2>
+        <div className="col-span-2 bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-bold mb-4">Transaction History</h2>
           <div className="space-y-4">
             <div className="flex justify-between items-center border-b pb-2">
               <div>

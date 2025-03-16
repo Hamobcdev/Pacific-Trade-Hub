@@ -1,55 +1,57 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom'; // Add useNavigate
-import { useGoogleLogin } from '@react-oauth/google';
-import { useAuth } from '../context/AuthContext'; // Import useAuth
-
-// Import images
+import { Link, useNavigate } from 'react-router-dom';
+import { useGoogleLogin, TokenResponse } from '@react-oauth/google';
+import { useAuth } from '../context/AuthContext';
 import AuthOceanBackground from '../assets/images/auth-ocean-background-1.jpg';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const navigate = useNavigate(); // For redirection
-  const { login } = useAuth(); // Access login function from AuthContext
+  const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleEmailPasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Placeholder for email/password login logic
     console.log('Email/Password Login submitted:', { email, password });
-    // Example: Call login with mock user data
-    login({ email, name: 'John Doe' });
+    login({ email, name: 'John Doe' }); // Placeholder
     navigate('/marketplace');
   };
 
   const googleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      console.log('Google Login Success:', tokenResponse);
-      // Fetch user info from Google using the access token
-      const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-        headers: {
-          Authorization: `Bearer ${tokenResponse.access_token}`,
-        },
-      });
-      const userInfo = await userInfoResponse.json();
-      console.log('Google User Info:', userInfo);
+    onSuccess: async (tokenResponse: TokenResponse) => {
+      console.log('Google Login Success - Token Response:', tokenResponse);
+      try {
+        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: {
+            Authorization: `Bearer ${tokenResponse.access_token}`,
+          },
+        });
+        const userInfo = await userInfoResponse.json();
+        console.log('Google User Info:', userInfo);
 
-      // Update authentication state
-      const userData = {
-        id: userInfo.sub,
-        name: userInfo.name,
-        email: userInfo.email,
-        profilePicture: userInfo.picture,
-      };
-      login(userData); // Update AuthContext state
-      navigate('/marketplace'); // Redirect to marketplace
-    },
-    onError: (error) => {
-      console.log('Google Login Failed:', error);
-      if (error?.type === 'popup_closed') {
-        alert('Popup was closed or blocked. Please allow popups for this site and try again.');
+        const userData = {
+          id: userInfo.sub,
+          name: userInfo.name,
+          email: userInfo.email,
+          profilePicture: userInfo.picture,
+        };
+        login(userData);
+        navigate('/marketplace');
+      } catch (error) {
+        console.error('Error fetching user info:', error);
       }
     },
-    redirect_uri: 'http://localhost:5174',
+    onError: (error: Pick<TokenResponse, 'error' | 'error_description' | 'error_uri'>) => {
+      console.error('Google Login Error:', error);
+      const errorString = error.error as string; // Type assertion to allow string comparison
+      if (errorString === 'popup_closed') {
+        alert('Popup was closed or blocked. Please allow popups for this site and try again.');
+      } else if (errorString === 'redirect_uri_mismatch') {
+        alert('Redirect URI mismatch. Check Google Cloud Console settings.');
+      } else {
+        alert(`Google Login failed: ${error.error_description || 'Unknown error'}`);
+      }
+    },
     flow: 'implicit',
   });
 

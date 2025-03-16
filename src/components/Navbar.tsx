@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, X, ShoppingCart, Sun, Moon, User, LogIn, LogOut } from 'lucide-react';
+import { Menu, X, ShoppingCart, Sun, Moon, User, LogIn, LogOut, Wallet } from 'lucide-react'; // Added Wallet icon
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -44,6 +44,10 @@ const Navbar: React.FC = () => {
           <div className="hidden md:flex items-center space-x-6">
             <Link to="/marketplace" className="hover:text-primary-light">
               Marketplace
+            </Link>
+            <Link to="/wallet" className="hover:text-primary-light flex items-center gap-2">
+              <Wallet size={20} /> {/* Wallet icon */}
+              Wallet
             </Link>
             <Link to="/cart" className="relative hover:text-primary-light">
               <ShoppingCart size={20} />
@@ -93,6 +97,14 @@ const Navbar: React.FC = () => {
                 onClick={closeMenu}
               >
                 Marketplace
+              </Link>
+              <Link 
+                to="/wallet" 
+                className="hover:text-primary-light flex items-center gap-2" 
+                onClick={closeMenu}
+              >
+                <Wallet size={20} /> {/* Wallet icon */}
+                Wallet
               </Link>
               <Link 
                 to="/cart" 

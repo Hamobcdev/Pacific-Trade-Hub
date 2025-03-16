@@ -1,32 +1,58 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useGoogleLogin } from '@react-oauth/google';
-
-// Import images (if already added or placeholder)
-import AuthBeachBackground from '../assets/images/auth-beach-background-2.jpg';
+import { Link, useNavigate } from 'react-router-dom';
+import { useGoogleLogin, TokenResponse } from '@react-oauth/google';
+import { useAuth } from '../context/AuthContext';
+import AuthBeachBackground from '../assets/images/auth-beach-background-2.jpg'; // Ensure this file exists
 
 const Signup: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleEmailPasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Placeholder for email/password signup logic
     console.log('Email/Password Signup submitted:', { name, email, password });
-    // Add success redirect or backend integration here (e.g., window.location.href = '/marketplace';)
-    alert('Signup successful! Please log in.'); // Temporary feedback
+    login({ email, name }); // Placeholder
+    navigate('/marketplace');
   };
 
   const googleSignup = useGoogleLogin({
-    onSuccess: (tokenResponse) => {
-      console.log('Google Signup Success:', tokenResponse);
-      // Handle token (e.g., verify with backend, redirect to /marketplace)
+    onSuccess: async (tokenResponse: TokenResponse) => {
+      console.log('Google Signup Success - Token Response:', tokenResponse);
+      try {
+        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: {
+            Authorization: `Bearer ${tokenResponse.access_token}`,
+          },
+        });
+        const userInfo = await userInfoResponse.json();
+        console.log('Google User Info:', userInfo);
+
+        const userData = {
+          id: userInfo.sub,
+          name: userInfo.name,
+          email: userInfo.email,
+          profilePicture: userInfo.picture,
+        };
+        login(userData);
+        navigate('/marketplace');
+      } catch (error) {
+        console.error('Error fetching user info:', error);
+      }
     },
-    onError: (error) => {
-      console.log('Google Signup Failed:', error);
+    onError: (error: Pick<TokenResponse, 'error' | 'error_description' | 'error_uri'>) => {
+      console.error('Google Signup Error:', error);
+      const errorString = error.error as string; // Type assertion to allow string comparison
+      if (errorString === 'popup_closed') {
+        alert('Popup was closed or blocked. Please allow popups for this site and try again.');
+      } else if (errorString === 'redirect_uri_mismatch') {
+        alert('Redirect URI mismatch. Check Google Cloud Console settings.');
+      } else {
+        alert(`Google Signup failed: ${error.error_description || 'Unknown error'}`);
+      }
     },
-    redirect_uri: 'http://localhost:5174',
     flow: 'implicit',
   });
 

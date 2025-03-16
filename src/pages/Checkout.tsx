@@ -1,10 +1,21 @@
 import React, { useState } from 'react';
+
+// Extend the Window interface to include the ethereum property
+declare global {
+  interface Window {
+    ethereum: any;
+  }
+}
+import { useNavigate } from 'react-router-dom'; // Add useNavigate
 import { CreditCard, Bitcoin } from 'lucide-react';
+import { ethers } from 'ethers';
 
 const Checkout: React.FC = () => {
   const [step, setStep] = useState(1);
   const [shippingInfo, setShippingInfo] = useState({ name: '', address: '', city: '', postalCode: '' });
   const [paymentMethod, setPaymentMethod] = useState('fiat');
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const navigate = useNavigate(); // For redirection
 
   const handleShippingSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -13,7 +24,60 @@ const Checkout: React.FC = () => {
 
   const handlePaymentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (paymentMethod === 'crypto' && !walletAddress) {
+      alert('Please connect your wallet to proceed with cryptocurrency payment.');
+      return;
+    }
     setStep(3);
+  };
+
+  const handleConnectWallet = async () => {
+    if (window.ethereum) {
+      try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        await provider.send('eth_requestAccounts', []);
+        const signer = await provider.getSigner();
+        const address = await signer.getAddress();
+        setWalletAddress(address);
+        console.log('Connected to wallet:', address);
+        alert(`Successfully connected to wallet: ${address}`);
+      } catch (error) {
+        console.error('Wallet connection failed:', error);
+        alert('Failed to connect wallet. Ensure MetaMask is installed and unlocked.');
+      }
+    } else {
+      alert('Please install MetaMask to use cryptocurrency payments.');
+    }
+  };
+
+  const handlePlaceOrder = async () => {
+    if (paymentMethod === 'crypto') {
+      if (!walletAddress) {
+        alert('Wallet not connected. Please connect your wallet.');
+        return;
+      }
+      try {
+        // Simulate cryptocurrency payment (replace with actual payment logic)
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        // Example: Send a small amount of ETH to a dummy address (for demo purposes)
+        // In a real app, you'd interact with a smart contract to pay in USDC/USDT
+        const tx = await signer.sendTransaction({
+          to: '0x000000000000000000000000000000000000dEaD', // Dummy address
+          value: ethers.parseEther('0.001'), // 0.001 ETH for demo
+        });
+        await tx.wait();
+        console.log('Transaction successful:', tx);
+        alert('Payment successful!');
+        navigate('/order-confirmation');
+      } catch (error) {
+        console.error('Payment failed:', error);
+        alert('Payment failed. Please try again.');
+      }
+    } else {
+      // Redirect to fiat payment page
+      navigate('/payment/fiat');
+    }
   };
 
   return (
@@ -94,9 +158,21 @@ const Checkout: React.FC = () => {
                   <span>Cryptocurrency (USDC/USDT)</span>
                 </label>
                 {paymentMethod === 'crypto' && (
-                  <p className="text-sm text-gray-600">Connect your wallet to proceed with crypto payment.</p>
+                  <div>
+                    <p className="text-sm text-gray-600 mb-2">Connect your wallet to proceed with crypto payment.</p>
+                    {!walletAddress ? (
+                      <button
+                        onClick={handleConnectWallet}
+                        className="btn-primary mt-2"
+                      >
+                        Connect Wallet
+                      </button>
+                    ) : (
+                      <p className="text-sm text-green-600">Connected: {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</p>
+                    )}
+                  </div>
                 )}
-                <button type="submit" className="btn-primary w-full">Review Order</button>
+                <button type="submit" className="btn-primary w-full mt-4">Review Order</button>
               </div>
             </form>
           )}
@@ -113,9 +189,14 @@ const Checkout: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="font-semibold">Payment Method</h3>
-                  <p>{paymentMethod === 'fiat' ? 'Credit/Debit Card' : 'Cryptocurrency'}</p>
+                  <p>{paymentMethod === 'fiat' ? 'Credit/Debit Card' : `Cryptocurrency (Wallet: ${walletAddress?.slice(0, 6)}...${walletAddress?.slice(-4)})`}</p>
                 </div>
-                <button className="btn-primary w-full">Place Order</button>
+                <button
+                  onClick={handlePlaceOrder}
+                  className="btn-primary w-full"
+                >
+                  Place Order
+                </button>
               </div>
             </div>
           )}
