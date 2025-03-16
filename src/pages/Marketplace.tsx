@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Search, Filter, SlidersHorizontal } from 'lucide-react';
+import { useCart } from '../context/CartContext';
 
 const Marketplace: React.FC = () => {
+  const { addToCart } = useCart();
   const [searchQuery, setSearchQuery] = useState('');
   const [priceRange, setPriceRange] = useState([0, 1000]);
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -13,7 +15,7 @@ const Marketplace: React.FC = () => {
     'Textiles',
     'Art',
     'Jewelry',
-    'Food & Beverages'
+    'Food & Beverages',
   ];
 
   // Placeholder products data
@@ -23,17 +25,25 @@ const Marketplace: React.FC = () => {
       name: 'Fresh Coconuts',
       price: 5.99,
       image: 'https://images.unsplash.com/photo-1581375321224-79da6fd32f6e?auto=format&fit=crop&w=300',
-      category: 'Fresh Produce'
+      category: 'Fresh Produce',
     },
     {
       id: 2,
       name: 'Handwoven Basket',
       price: 45.00,
       image: 'https://images.unsplash.com/photo-1595408076683-5d0c643e4f11?auto=format&fit=crop&w=300',
-      category: 'Handicrafts'
+      category: 'Handicrafts',
     },
-    // Add more products as needed
   ];
+
+  // Filter products based on search, category, and price range
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory =
+      selectedCategory === 'all' || product.category.toLowerCase() === selectedCategory;
+    const matchesPrice = product.price >= priceRange[0] && product.price <= priceRange[1];
+    return matchesSearch && matchesCategory && matchesPrice;
+  });
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -102,7 +112,7 @@ const Marketplace: React.FC = () => {
         {/* Product Grid */}
         <div className="md:col-span-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {products.map((product) => (
+            {filteredProducts.map((product) => (
               <div key={product.id} className="bg-white rounded-lg shadow-md overflow-hidden">
                 <img
                   src={product.image}
@@ -112,7 +122,10 @@ const Marketplace: React.FC = () => {
                 <div className="p-4">
                   <h3 className="text-lg font-semibold mb-2">{product.name}</h3>
                   <p className="text-primary font-bold">${product.price.toFixed(2)}</p>
-                  <button className="mt-4 w-full bg-primary text-white py-2 rounded-lg hover:bg-opacity-90 transition-colors">
+                  <button
+                    onClick={() => addToCart({ ...product, quantity: 1 })} // Add with quantity 1
+                    className="mt-4 w-full bg-primary text-white py-2 rounded-lg hover:bg-opacity-90 transition-colors"
+                  >
                     Add to Cart
                   </button>
                 </div>
