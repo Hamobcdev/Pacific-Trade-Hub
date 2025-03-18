@@ -1,59 +1,57 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useGoogleLogin, TokenResponse } from '@react-oauth/google';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import AuthOceanBackground from '../assets/images/auth-ocean-background-1.jpg';
+import { ethers } from 'ethers';
 
 const Login: React.FC = () => {
+  const navigate = useNavigate();
+  const { signInWithWallet } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const navigate = useNavigate();
-  const { login } = useAuth();
 
-  const handleEmailPasswordSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log('Email/Password Login submitted:', { email, password });
-    login({ email, name: 'John Doe' }); // Placeholder
-    navigate('/marketplace');
+  const handleGoogleLogin = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/marketplace` },
+    });
+    if (error) {
+      console.error('Google Login Error:', error.message);
+      alert('Login failed. Please try again.');
+    }
   };
 
-  const googleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse: TokenResponse) => {
-      console.log('Google Login Success - Token Response:', tokenResponse);
-      try {
-        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-          headers: {
-            Authorization: `Bearer ${tokenResponse.access_token}`,
-          },
-        });
-        const userInfo = await userInfoResponse.json();
-        console.log('Google User Info:', userInfo);
+  const handleWalletLogin = async () => {
+    if (!window.ethereum) {
+      alert('Please install MetaMask!');
+      return;
+    }
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+      const message = `Sign in to Pacific Trade Hub at ${new Date().toISOString()}`;
+      const signature = await signer.signMessage(message);
 
-        const userData = {
-          id: userInfo.sub,
-          name: userInfo.name,
-          email: userInfo.email,
-          profilePicture: userInfo.picture,
-        };
-        login(userData);
-        navigate('/marketplace');
-      } catch (error) {
-        console.error('Error fetching user info:', error);
-      }
-    },
-    onError: (error: Pick<TokenResponse, 'error' | 'error_description' | 'error_uri'>) => {
-      console.error('Google Login Error:', error);
-      const errorString = error.error as string; // Type assertion to allow string comparison
-      if (errorString === 'popup_closed') {
-        alert('Popup was closed or blocked. Please allow popups for this site and try again.');
-      } else if (errorString === 'redirect_uri_mismatch') {
-        alert('Redirect URI mismatch. Check Google Cloud Console settings.');
-      } else {
-        alert(`Google Login failed: ${error.error_description || 'Unknown error'}`);
-      }
-    },
-    flow: 'implicit',
-  });
+      await signInWithWallet(address, signature, message);
+      navigate('/marketplace');
+    } catch (error) {
+      console.error('Wallet Login Error:', error);
+      alert('Wallet login failed. Please try again.');
+    }
+  };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      console.error('Email Login Error:', error.message);
+      alert('Login failed. Check your credentials.');
+    } else {
+      navigate('/marketplace');
+    }
+  };
 
   return (
     <div
@@ -62,14 +60,14 @@ const Login: React.FC = () => {
     >
       <div className="bg-white rounded-lg shadow-md p-8 w-full max-w-md">
         <h1 className="text-3xl font-pacifico text-primary mb-6 text-center">Login</h1>
-        <form onSubmit={handleEmailPasswordSubmit} className="space-y-6">
+        <form onSubmit={handleEmailLogin} className="space-y-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full p-3 border rounded-lg mt-1"
+              className="w-full p-2 border rounded-lg"
               required
             />
           </div>
@@ -79,18 +77,26 @@ const Login: React.FC = () => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 border rounded-lg mt-1"
+              className="w-full p-2 border rounded-lg"
               required
             />
           </div>
-          <button type="submit" className="btn-primary w-full">Login</button>
+          <button type="submit" className="btn-primary w-full">
+            Login with Email
+          </button>
         </form>
         <button
-          onClick={() => googleLogin()}
-          className="btn-primary w-full mt-4 flex items-center justify-center space-x-2"
+          onClick={handleGoogleLogin}
+          className="btn-primary w-full flex items-center justify-center space-x-2 mb-4"
         >
           <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
           <span>Login with Google</span>
+        </button>
+        <button
+          onClick={handleWalletLogin}
+          className="btn-primary w-full flex items-center justify-center space-x-2"
+        >
+          <span>Login with Wallet</span>
         </button>
         <div className="text-center mt-4">
           <Link to="/signup" className="text-sm text-primary hover:text-primary-dark">

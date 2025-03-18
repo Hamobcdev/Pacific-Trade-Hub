@@ -20,6 +20,8 @@ import Signup from './pages/Signup';
 import KYC from './pages/KYC';
 import OrderConfirmation from './pages/OrderConfirmation';
 import FiatPayment from './pages/FiatPayment';
+import RegulatoryDashboard from './pages/RegulatoryDashboard';
+import MerchantRegistration from './pages/MerchantRegistration';
 import ErrorBoundary from './components/ErrorBoundary';
 
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -36,6 +38,7 @@ const App: React.FC = () => {
                 <main className="flex-grow">
                   <Routes>
                     <Route path="/" element={<HomePage />} />
+                    <Route path="/merchant-registration" element={<MerchantRegistration />} />
                     <Route path="/marketplace" element={<Marketplace />} />
                     <Route path="/product/:id" element={<ProductDetail />} />
                     <Route path="/cart" element={<Cart />} />
@@ -46,6 +49,7 @@ const App: React.FC = () => {
                     <Route path="/merchant" element={<MerchantPortal />} />
                     <Route path="/order-confirmation" element={<OrderConfirmation />} />
                     <Route path="/payment/fiat" element={<FiatPayment />} />
+                    <Route path="/regulatory-dashboard" element={<RegulatoryDashboard />} />
                     <Route
                       path="/login"
                       element={

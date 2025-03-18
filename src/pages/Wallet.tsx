@@ -1,65 +1,147 @@
-import React, { useState } from 'react';
-import { Wallet as WalletIcon, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
+import { ethers } from 'ethers';
+import { useNavigate } from 'react-router-dom';
 
 const Wallet: React.FC = () => {
-  const [balances] = useState({
-    wst: 1000.50,
-    usdc: 200.00,
-  });
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [localPaymentAmount, setLocalPaymentAmount] = useState('');
+  const [cryptoType, setCryptoType] = useState<'ETH' | 'USDC' | 'USDT'>('ETH');
+
+  useEffect(() => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    if (user.country === 'Samoa' && user.kycStatus !== 'verified') {
+      alert('Please complete KYC for crypto purchases.');
+      navigate('/kyc');
+    }
+    fetchTransactions();
+  }, [user, navigate]);
+
+  const connectWallet = async () => {
+    if (window.ethereum) {
+      try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const accounts = await provider.send('eth_requestAccounts', []);
+        setWalletAddress(accounts[0]);
+      } catch (error) {
+        console.error('Wallet connection error:', error);
+        alert('Failed to connect wallet.');
+      }
+    } else {
+      alert('Please install MetaMask!');
+    }
+  };
+
+  const fetchTransactions = async () => {
+    if (user?.id) {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) {
+        console.error('Error fetching transactions:', error);
+      } else {
+        setTransactions(data || []);
+      }
+    }
+  };
+
+  const handleLocalPayment = async () => {
+    if (!walletAddress || !localPaymentAmount) {
+      alert('Connect wallet and enter an amount.');
+      return;
+    }
+    // Simulate Chainlink price feed (future integration)
+    const simulatedPrice = { ETH: 2000, USDC: 1, USDT: 1 }[cryptoType];
+    const cryptoAmount = parseFloat(localPaymentAmount) / simulatedPrice;
+    alert(`Simulating purchase of ${cryptoAmount} ${cryptoType} for ${localPaymentAmount} local fiat`);
+    await supabase.from('transactions').insert({
+      user_id: user?.id || '',
+      type: 'local_crypto_purchase',
+      amount: cryptoAmount,
+      currency: cryptoType,
+      status: 'pending',
+      tx_hash: 'LOCAL_SIMULATION',
+    });
+    fetchTransactions();
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-4xl font-pacifico text-primary mb-8">Wallet</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* Balances */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold mb-4 flex items-center">
-            <WalletIcon size={24} className="mr-2" />
-            Balances
-          </h2>
-          <div className="space-y-4">
-            <div className="flex justify-between">
-              <span>WST</span>
-              <span className="font-bold">{balances.wst.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>USDC</span>
-              <span className="font-bold">{balances.usdc.toFixed(2)}</span>
-            </div>
-          </div>
-          <div className="mt-6 space-y-4">
-            <button className="btn-primary w-full flex items-center justify-center space-x-2">
-              <ArrowDownCircle size={20} />
-              <span>Deposit</span>
-            </button>
-            <button className="btn-primary w-full flex items-center justify-center space-x-2">
-              <ArrowUpCircle size={20} />
-              <span>Withdraw</span>
-            </button>
-          </div>
-        </div>
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-bold mb-4">Connect Wallet</h2>
+        <button
+          onClick={connectWallet}
+          className="btn-primary mb-4"
+          disabled={!!walletAddress}
+        >
+          {walletAddress ? `Connected: ${walletAddress.slice(0, 6)}...` : 'Connect Wallet'}
+        </button>
+      </div>
 
-        {/* Transaction History */}
-        <div className="col-span-2 bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold mb-4">Transaction History</h2>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center border-b pb-2">
-              <div>
-                <p className="font-medium">Deposit</p>
-                <p className="text-sm text-gray-600">Mar 10, 2025</p>
-              </div>
-              <span className="text-green-600">+500.00 WST</span>
-            </div>
-            <div className="flex justify-between items-center border-b pb-2">
-              <div>
-                <p className="font-medium">Purchase</p>
-                <p className="text-sm text-gray-600">Mar 9, 2025</p>
-              </div>
-              <span className="text-red-600">-45.00 USDC</span>
-            </div>
-          </div>
-        </div>
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-bold mb-4">Local Crypto Purchase</h2>
+        <p className="mb-4">Buy crypto with local bank card or mobile money (simulated).</p>
+        <select
+          value={cryptoType}
+          onChange={(e) => setCryptoType(e.target.value as 'ETH' | 'USDC' | 'USDT')}
+          className="w-full p-2 border rounded-lg mb-4"
+        >
+          <option value="ETH">Ethereum (ETH)</option>
+          <option value="USDC">USD Coin (USDC)</option>
+          <option value="USDT">Tether (USDT)</option>
+        </select>
+        <input
+          type="number"
+          value={localPaymentAmount}
+          onChange={(e) => setLocalPaymentAmount(e.target.value)}
+          placeholder="Amount in local currency"
+          className="w-full p-2 border rounded-lg mb-4"
+        />
+        <button onClick={handleLocalPayment} className="btn-primary w-full">
+          Purchase Crypto
+        </button>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-xl font-bold mb-4">Transaction History</h2>
+        {transactions.length === 0 ? (
+          <p>No transactions yet.</p>
+        ) : (
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b">
+                <th className="py-2">Type</th>
+                <th className="py-2">Amount</th>
+                <th className="py-2">Currency</th>
+                <th className="py-2">Status</th>
+                <th className="py-2">Date</th>
+                <th className="py-2">Tx Hash</th>
+              </tr>
+            </thead>
+            <tbody>
+              {transactions.map((tx) => (
+                <tr key={tx.id} className="border-b">
+                  <td className="py-2">{tx.type}</td>
+                  <td className="py-2">{tx.amount}</td>
+                  <td className="py-2">{tx.currency}</td>
+                  <td className="py-2">{tx.status}</td>
+                  <td className="py-2">{new Date(tx.created_at).toLocaleDateString()}</td>
+                  <td className="py-2">{tx.tx_hash.slice(0, 8)}...</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

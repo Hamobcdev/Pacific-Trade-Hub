@@ -1,60 +1,58 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useGoogleLogin, TokenResponse } from '@react-oauth/google';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import AuthBeachBackground from '../assets/images/auth-beach-background-2.jpg'; // Ensure this file exists
+import AuthBeachBackground from '../assets/images/auth-beach-background-2.jpg';
+import { ethers } from 'ethers';
 
 const Signup: React.FC = () => {
+  const navigate = useNavigate();
+  const { signInWithWallet } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const navigate = useNavigate();
-  const { login } = useAuth();
 
-  const handleEmailPasswordSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log('Email/Password Signup submitted:', { name, email, password });
-    login({ email, name }); // Placeholder
-    navigate('/marketplace');
+  const handleGoogleSignup = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/marketplace` },
+    });
+    if (error) {
+      console.error('Google Signup Error:', error.message);
+      alert('Signup failed. Please try again.');
+    }
   };
 
-  const googleSignup = useGoogleLogin({
-    onSuccess: async (tokenResponse: TokenResponse) => {
-      console.log('Google Signup Success - Token Response:', tokenResponse);
-      try {
-        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-          headers: {
-            Authorization: `Bearer ${tokenResponse.access_token}`,
-          },
-        });
-        const userInfo = await userInfoResponse.json();
-        console.log('Google User Info:', userInfo);
+  const handleWalletSignup = async () => {
+    if (!window.ethereum) {
+      alert('Please install MetaMask!');
+      return;
+    }
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+      const message = `Sign up to Pacific Trade Hub at ${new Date().toISOString()}`;
+      const signature = await signer.signMessage(message);
 
-        const userData = {
-          id: userInfo.sub,
-          name: userInfo.name,
-          email: userInfo.email,
-          profilePicture: userInfo.picture,
-        };
-        login(userData);
-        navigate('/marketplace');
-      } catch (error) {
-        console.error('Error fetching user info:', error);
-      }
-    },
-    onError: (error: Pick<TokenResponse, 'error' | 'error_description' | 'error_uri'>) => {
-      console.error('Google Signup Error:', error);
-      const errorString = error.error as string; // Type assertion to allow string comparison
-      if (errorString === 'popup_closed') {
-        alert('Popup was closed or blocked. Please allow popups for this site and try again.');
-      } else if (errorString === 'redirect_uri_mismatch') {
-        alert('Redirect URI mismatch. Check Google Cloud Console settings.');
-      } else {
-        alert(`Google Signup failed: ${error.error_description || 'Unknown error'}`);
-      }
-    },
-    flow: 'implicit',
-  });
+      await signInWithWallet(address, signature, message);
+      navigate('/marketplace');
+    } catch (error) {
+      console.error('Wallet Signup Error:', error);
+      alert('Wallet signup failed. Please try again.');
+    }
+  };
+
+  const handleEmailSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      console.error('Email Signup Error:', error.message);
+      alert('Signup failed. Please try again.');
+    } else {
+      alert('Check your email for a confirmation link!');
+      navigate('/login');
+    }
+  };
 
   return (
     <div
@@ -63,24 +61,14 @@ const Signup: React.FC = () => {
     >
       <div className="bg-white rounded-lg shadow-md p-8 w-full max-w-md">
         <h1 className="text-3xl font-pacifico text-primary mb-6 text-center">Sign Up</h1>
-        <form onSubmit={handleEmailPasswordSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Full Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full p-3 border rounded-lg mt-1"
-              required
-            />
-          </div>
+        <form onSubmit={handleEmailSignup} className="space-y-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full p-3 border rounded-lg mt-1"
+              className="w-full p-2 border rounded-lg"
               required
             />
           </div>
@@ -90,21 +78,32 @@ const Signup: React.FC = () => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 border rounded-lg mt-1"
+              className="w-full p-2 border rounded-lg"
               required
             />
           </div>
-          <button type="submit" className="btn-primary w-full">Sign Up</button>
+          <button type="submit" className="btn-primary w-full">
+            Sign Up with Email
+          </button>
         </form>
         <button
-          onClick={() => googleSignup()}
-          className="btn-primary w-full mt-4 flex items-center justify-center space-x-2"
+          onClick={handleGoogleSignup}
+          className="btn-primary w-full flex items-center justify-center space-x-2 mb-4"
         >
           <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
           <span>Sign Up with Google</span>
         </button>
+        <button
+          onClick={handleWalletSignup}
+          className="btn-primary w-full flex items-center justify-center space-x-2"
+        >
+          <span>Sign Up with Wallet</span>
+        </button>
         <p className="text-center mt-4">
-          Already have an account? <Link to="/login" className="text-primary hover:underline">Login</Link>
+          Already have an account?{' '}
+          <Link to="/login" className="text-primary hover:underline">
+            Login
+          </Link>
         </p>
       </div>
     </div>
