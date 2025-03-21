@@ -6,30 +6,44 @@ import { useAuth } from '../context/AuthContext';
 const Profile: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [name, setName] = useState(user?.name || '');
-  const [country, setCountry] = useState(user?.country || '');
+  const [name, setName] = useState('');
+  const [country, setCountry] = useState('');
+  const [kycStatus, setKycStatus] = useState(false);
 
   useEffect(() => {
     if (!user) {
       navigate('/login');
+      return;
     }
+    const fetchProfile = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('name, country, kyc_status')
+        .eq('email', user.email) // Use email, not id
+        .single();
+      if (error) {
+        console.error('Fetch error:', error);
+      } else if (data) {
+        setName(data.name || '');
+        setCountry(data.country || '');
+        setKycStatus(data.kyc_status || false);
+      }
+    };
+    fetchProfile();
   }, [user, navigate]);
 
   const handleSave = async () => {
     if (!user) return;
     const { error } = await supabase
       .from('profiles')
-      .update({ name, country })
-      .eq('id', user.id);
+      .upsert({ email: user.email, name, country, kyc_status: kycStatus })
+      .eq('email', user.email); // Match on email
     if (error) {
-      console.error('Error updating profile:', error);
-      alert('Failed to save changes.');
+      console.error('Save error:', error);
+      alert('Failed to save: ' + error.message);
     } else {
       alert('Profile updated!');
-      // Update local user state
-      const updatedUser = { ...user, name, country };
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      window.location.reload(); // Refresh to reflect changes
+      window.location.reload();
     }
   };
 
@@ -42,43 +56,21 @@ const Profile: React.FC = () => {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full p-2 border rounded-lg"
-            />
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full p-2 border rounded-lg" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Email</label>
-            <input
-              type="email"
-              value={user.email || ''}
-              className="w-full p-2 border rounded-lg"
-              disabled
-            />
+            <input type="email" value={user.email || ''} className="w-full p-2 border rounded-lg" disabled />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Country</label>
-            <input
-              type="text"
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              className="w-full p-2 border rounded-lg"
-            />
+            <input type="text" value={country} onChange={(e) => setCountry(e.target.value)} className="w-full p-2 border rounded-lg" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">KYC Status</label>
-            <input
-              type="text"
-              value={user.kycStatus || 'unverified'}
-              className="w-full p-2 border rounded-lg"
-              disabled
-            />
+            <input type="text" value={kycStatus ? 'verified' : 'unverified'} className="w-full p-2 border rounded-lg" disabled />
           </div>
-          <button onClick={handleSave} className="btn-primary w-full">
-            Save Changes
-          </button>
+          <button onClick={handleSave} className="btn-primary w-full">Save Changes</button>
         </div>
       </div>
     </div>

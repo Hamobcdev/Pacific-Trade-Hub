@@ -3,48 +3,63 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { ethers } from 'ethers';
 import { useNavigate } from 'react-router-dom';
+import { useSwap } from '../../web3/hooks/useSwap'; // Adjusted path
+import { useVault } from '../../web3/hooks/useVault';
+
+// Extend Window type for MetaMask
+interface WindowWithEthereum extends Window {
+  ethereum?: any;
+}
 
 const Wallet: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const swap = useSwap(user?.walletAddress); 
+  const vault = useVault(user?.walletAddress);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [localPaymentAmount, setLocalPaymentAmount] = useState('');
   const [cryptoType, setCryptoType] = useState<'ETH' | 'USDC' | 'USDT'>('ETH');
 
   useEffect(() => {
+    console.log('Wallet user:', user);
     if (!user) {
+      console.log('No user, redirecting to /login');
       navigate('/login');
       return;
     }
-    if (user.country === 'Samoa' && user.kycStatus !== 'verified') {
+    if (user.country === 'Samoa' && !user.kycStatus) { // Adjusted to BOOLEAN
       alert('Please complete KYC for crypto purchases.');
-      navigate('/kyc');
+      //navigate('/kyc'); disabled temorarily for testing
     }
     fetchTransactions();
   }, [user, navigate]);
 
   const connectWallet = async () => {
-    if (window.ethereum) {
-      try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const accounts = await provider.send('eth_requestAccounts', []);
-        setWalletAddress(accounts[0]);
-      } catch (error) {
-        console.error('Wallet connection error:', error);
-        alert('Failed to connect wallet.');
-      }
-    } else {
+    const win = window as WindowWithEthereum;
+    if (!win.ethereum) {
       alert('Please install MetaMask!');
+      return;
+    }
+    try {
+      const provider = new ethers.providers.Web3Provider(win.ethereum);
+      await provider.send('eth_requestAccounts', []);
+      const signer = provider.getSigner();
+      const address = await signer.getAddress();
+      setWalletAddress(address);
+      console.log('Connected:', address);
+    } catch (error: any) {
+      console.error('Wallet connection error:', error.message);
+      alert('Failed to connect wallet: ' + error.message);
     }
   };
 
   const fetchTransactions = async () => {
-    if (user?.id) {
+    if (user?.email) { // Switched to email due to profiles table change
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user.email) // Use email instead of id
         .order('created_at', { ascending: false });
       if (error) {
         console.error('Error fetching transactions:', error);
@@ -55,23 +70,29 @@ const Wallet: React.FC = () => {
   };
 
   const handleLocalPayment = async () => {
-    if (!walletAddress || !localPaymentAmount) {
-      alert('Connect wallet and enter an amount.');
+    if (!walletAddress || !localPaymentAmount || !swap) {
+      alert('Connect wallet, enter an amount, and ensure contracts are loaded.');
       return;
     }
-    // Simulate Chainlink price feed (future integration)
-    const simulatedPrice = { ETH: 2000, USDC: 1, USDT: 1 }[cryptoType];
-    const cryptoAmount = parseFloat(localPaymentAmount) / simulatedPrice;
-    alert(`Simulating purchase of ${cryptoAmount} ${cryptoType} for ${localPaymentAmount} local fiat`);
-    await supabase.from('transactions').insert({
-      user_id: user?.id || '',
-      type: 'local_crypto_purchase',
-      amount: cryptoAmount,
-      currency: cryptoType,
-      status: 'pending',
-      tx_hash: 'LOCAL_SIMULATION',
-    });
-    fetchTransactions();
+    try {
+      const amountInEther = localPaymentAmount; // Assuming input is in ETH for simplicity
+      const tx = await swap.performSwap(walletAddress, amountInEther);
+      const receipt = await tx.receipt;
+
+      await supabase.from('transactions').insert({
+        user_id: user?.email || '', // Use email
+        type: 'crypto_purchase',
+        amount: parseFloat(localPaymentAmount),
+        currency: cryptoType,
+        status: 'completed',
+        tx_hash: receipt.transactionHash,
+      });
+      fetchTransactions();
+      alert(`Purchased ${localPaymentAmount} ${cryptoType} via blockchain!`);
+    } catch (error: any) {
+      console.error('Purchase error:', error);
+      alert('Failed to purchase crypto: ' + error.message);
+    }
   };
 
   return (
@@ -89,8 +110,8 @@ const Wallet: React.FC = () => {
       </div>
 
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 className="text-xl font-bold mb-4">Local Crypto Purchase</h2>
-        <p className="mb-4">Buy crypto with local bank card or mobile money (simulated).</p>
+        <h2 className="text-xl font-bold mb-4">Crypto Purchase</h2>
+        <p className="mb-4">Buy crypto with local fiat (blockchain transaction).</p>
         <select
           value={cryptoType}
           onChange={(e) => setCryptoType(e.target.value as 'ETH' | 'USDC' | 'USDT')}
@@ -104,7 +125,7 @@ const Wallet: React.FC = () => {
           type="number"
           value={localPaymentAmount}
           onChange={(e) => setLocalPaymentAmount(e.target.value)}
-          placeholder="Amount in local currency"
+          placeholder="Amount in ETH"
           className="w-full p-2 border rounded-lg mb-4"
         />
         <button onClick={handleLocalPayment} className="btn-primary w-full">

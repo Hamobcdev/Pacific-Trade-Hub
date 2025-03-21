@@ -5,14 +5,25 @@ import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
+interface Product {
+  id: string | number;
+  name: string;
+  price: number;
+  image: string;
+  category: string;
+  merchant_id: string;
+  merchants?: { name: string }; // Optional merchants field
+}
+
 const Marketplace: React.FC = () => {
   const { addToCart } = useCart();
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [priceRange, setPriceRange] = useState([0, 1000]);
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const adminEmails = ['siaosiw@gmail.com'];
 
   const categories = [
@@ -25,7 +36,7 @@ const Marketplace: React.FC = () => {
     'Food & Beverages',
   ];
 
-  const fallbackProducts = [
+  const fallbackProducts: Product[] = [
     { id: 1, name: 'Fresh Coconuts', price: 5.99, image: 'https://placehold.co/300', category: 'Fresh Produce', merchant_id: 'merchant1', merchants: { name: 'Samoa Farms' } },
     { id: 2, name: 'Handwoven Basket', price: 45.00, image: 'https://placehold.co/300', category: 'Handicrafts', merchant_id: 'merchant2', merchants: { name: 'Pacific Crafts' } },
     { id: 3, name: 'Samoan Textile', price: 30.00, image: 'https://placehold.co/300', category: 'Textiles', merchant_id: 'merchant1', merchants: { name: 'Samoa Farms' } },
@@ -38,15 +49,16 @@ const Marketplace: React.FC = () => {
 
   useEffect(() => {
     const fetchProducts = async () => {
-      const { data, error } = await supabase
-        .from('products')
-        .select('id, name, price, image, category, merchant_id, merchants(name)');
+      setLoading(true);
+      const { data, error } = await supabase.from('products').select('*, merchants(name)');
       if (error) {
         console.error('Error fetching products:', error);
-        setProducts(fallbackProducts); // Use fallback on error
+        setProducts(fallbackProducts);
       } else {
-        setProducts(data.length > 0 ? data : fallbackProducts); // Use fallback if no data
+        console.log('Supabase products:', data);
+        setProducts(data || fallbackProducts);
       }
+      setLoading(false);
     };
     fetchProducts();
   }, []);
@@ -60,9 +72,11 @@ const Marketplace: React.FC = () => {
   });
 
   const handleLogout = async () => {
-    await logout();
+    await signOut();
     navigate('/login');
   };
+
+  if (loading) return <div className="container mx-auto px-4 py-8">Loading products...</div>;
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -160,11 +174,11 @@ const Marketplace: React.FC = () => {
                   <div className="p-4">
                     <h3 className="text-lg font-semibold mb-2">{product.name}</h3>
                     <p className="text-gray-600 text-sm mb-2">
-                      Sold by: <span className="text-primary">{product.merchants.name}</span>
+                      Sold by: <span className="text-primary">{product.merchants?.name || 'Unknown Merchant'}</span>
                     </p>
                     <p className="text-primary font-bold">${product.price.toFixed(2)}</p>
                     <button
-                      onClick={() => addToCart({ ...product, quantity: 1 })}
+                      onClick={() => addToCart({ ...product, id: Number(product.id), quantity: 1 })}
                       className="mt-4 w-full bg-primary text-white py-2 rounded-lg hover:bg-opacity-90 transition-colors"
                     >
                       Add to Cart
