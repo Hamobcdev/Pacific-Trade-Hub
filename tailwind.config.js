@@ -1,5 +1,7 @@
 /** @type {import('tailwindcss').Config} */
-export default {
+import { withAccountKitUi } from "@account-kit/react/tailwind";
+
+export default withAccountKitUi({
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
@@ -17,4 +19,10 @@ export default {
     },
   },
   plugins: [],
-};
+}, {
+  // Optional: Customize Account Kit UI to match PTH branding
+  colors: {
+    "btn-primary": '#006D77', // Matches your primary color
+    "text-primary": '#1A3A3A', // Matches your textColor
+  },
+});

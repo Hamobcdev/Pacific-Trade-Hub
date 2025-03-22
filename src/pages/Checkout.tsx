@@ -3,19 +3,21 @@ import { useAuth } from '../context/AuthContext';
 import KYC from './KYC';
 
 const Checkout = () => {
-  const { user, fetchUserProfile } = useAuth();
+  const { user } = useAuth(); // fetchUserProfile removed
   const [paymentType, setPaymentType] = useState<'fiat' | 'crypto'>('fiat');
   const [profile, setProfile] = useState<{ email: string; kyc_status: string; country: string } | null>(null);
   const [mockWalletBalance, setMockWalletBalance] = useState(100); // Mock testnet balance
   const [cartTotal] = useState(50); // Mock cart total
 
   useEffect(() => {
-    const loadProfile = async () => {
-      const userProfile = await fetchUserProfile();
-      setProfile(userProfile);
-    };
-    if (user) loadProfile();
-  }, [user, fetchUserProfile]);
+    if (user) {
+      setProfile({
+        email: user.email,
+        kyc_status: user.kyc_status || 'unverified', // Default if missing
+        country: user.country || 'Unknown', // Default if missing
+      });
+    }
+  }, [user]);
 
   const simulateMultisigApproval = () => {
     return Math.random() > 0.2 ? 'Approved' : 'Rejected'; // 80% approval

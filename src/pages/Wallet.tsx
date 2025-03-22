@@ -1,167 +1,127 @@
-import React, { useState, useEffect } from 'react';
+import * as React from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { ethers } from 'ethers';
 import { useNavigate } from 'react-router-dom';
-import { useSwap } from '../../web3/hooks/useSwap'; // Adjusted path
-import { useVault } from '../../web3/hooks/useVault';
+import { useSmartAccountClient, useSendUserOperation } from '@account-kit/react';
+import { encodeFunctionData } from 'viem';
 
-// Extend Window type for MetaMask
-interface WindowWithEthereum extends Window {
-  ethereum?: any;
-}
+const VAULT_CONTRACT_ADDRESS = '0xFcC343846312D381cE87f7247463e9e6f17A3eaF'; // Replace after deployment
+const VAULT_ABI = [
+  "function purchaseCredits(uint256 amount) external payable",
+];
 
 const Wallet: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const swap = useSwap(user?.walletAddress); 
-  const vault = useVault(user?.walletAddress);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [localPaymentAmount, setLocalPaymentAmount] = useState('');
-  const [cryptoType, setCryptoType] = useState<'ETH' | 'USDC' | 'USDT'>('ETH');
+  const [creditAmount, setCreditAmount] = useState('');
+  const [cryptoType, setCryptoType] = useState<'PTH' | 'USDC' | 'USDT'>('PTH');
+  const { client: smartAccountClient } = useSmartAccountClient({ type: "MultiOwnerModularAccount" });
+  const { sendUserOperation } = useSendUserOperation({ client: smartAccountClient });
 
   useEffect(() => {
-    console.log('Wallet user:', user);
-    if (!user) {
-      console.log('No user, redirecting to /login');
-      navigate('/login');
-      return;
-    }
-    if (user.country === 'Samoa' && !user.kycStatus) { // Adjusted to BOOLEAN
-      alert('Please complete KYC for crypto purchases.');
-      //navigate('/kyc'); disabled temorarily for testing
-    }
+    if (!user) navigate('/login');
+    if (user?.country === 'Samoa' && !user.kycStatus) alert('Please complete KYC.');
     fetchTransactions();
   }, [user, navigate]);
 
-  const connectWallet = async () => {
-    const win = window as WindowWithEthereum;
-    if (!win.ethereum) {
-      alert('Please install MetaMask!');
-      return;
-    }
-    try {
-      const provider = new ethers.providers.Web3Provider(win.ethereum);
-      await provider.send('eth_requestAccounts', []);
-      const signer = provider.getSigner();
-      const address = await signer.getAddress();
-      setWalletAddress(address);
-      console.log('Connected:', address);
-    } catch (error: any) {
-      console.error('Wallet connection error:', error.message);
-      alert('Failed to connect wallet: ' + error.message);
-    }
-  };
-
   const fetchTransactions = async () => {
-    if (user?.email) { // Switched to email due to profiles table change
+    if (user?.email) {
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
-        .eq('user_id', user.email) // Use email instead of id
+        .eq('user_id', user.email)
         .order('created_at', { ascending: false });
-      if (error) {
-        console.error('Error fetching transactions:', error);
-      } else {
-        setTransactions(data || []);
-      }
+      if (error) console.error('Error fetching transactions:', error);
+      else setTransactions(data || []);
     }
   };
 
-  const handleLocalPayment = async () => {
-    if (!walletAddress || !localPaymentAmount || !swap) {
-      alert('Connect wallet, enter an amount, and ensure contracts are loaded.');
+  const handleCreditPurchase = async () => {
+    if (!smartAccountClient || !creditAmount) {
+      alert('Connect account and enter an amount.');
       return;
     }
     try {
-      const amountInEther = localPaymentAmount; // Assuming input is in ETH for simplicity
-      const tx = await swap.performSwap(walletAddress, amountInEther);
-      const receipt = await tx.receipt;
+      const credits = BigInt(Math.floor(parseFloat(creditAmount))); // Credits as whole units
+      const ethValue = credits * BigInt(0.01 ether); // 0.01 ETH per credit
+
+      const callData = encodeFunctionData({
+        abi: VAULT_ABI,
+        functionName: 'purchaseCredits',
+        args: [credits],
+      });
+
+      const uoResult = await sendUserOperation({
+        uo: {
+          target: VAULT_CONTRACT_ADDRESS as `0x${string}`,
+          data: callData,
+          value: ethValue,
+        },
+      });
+
+      const txHash = (uoResult as unknown as { hash: string }).hash;
 
       await supabase.from('transactions').insert({
-        user_id: user?.email || '', // Use email
-        type: 'crypto_purchase',
-        amount: parseFloat(localPaymentAmount),
+        user_id: user?.email || '',
+        type: 'credit_purchase',
+        amount: parseFloat(creditAmount),
         currency: cryptoType,
         status: 'completed',
-        tx_hash: receipt.transactionHash,
+        tx_hash: txHash,
       });
       fetchTransactions();
-      alert(`Purchased ${localPaymentAmount} ${cryptoType} via blockchain!`);
+      alert(`Purchased ${creditAmount} ${cryptoType} credits!`);
+      setCreditAmount('');
     } catch (error: any) {
       console.error('Purchase error:', error);
-      alert('Failed to purchase crypto: ' + error.message);
+      alert('Failed to purchase credits: ' + (error.message || error));
     }
   };
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-4xl font-pacifico text-primary mb-8">Wallet</h1>
+      <h1 className="text-4xl font-pacifico text-primary mb-8">Merchant Wallet</h1>
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 className="text-xl font-bold mb-4">Connect Wallet</h2>
-        <button
-          onClick={connectWallet}
-          className="btn-primary mb-4"
-          disabled={!!walletAddress}
-        >
-          {walletAddress ? `Connected: ${walletAddress.slice(0, 6)}...` : 'Connect Wallet'}
-        </button>
+        <h2 className="text-xl font-bold mb-4">Smart Account</h2>
+        <p>{smartAccountClient?.account?.address ? `Connected: ${smartAccountClient.account.address.slice(0, 6)}...` : 'Not connected'}</p>
       </div>
-
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 className="text-xl font-bold mb-4">Crypto Purchase</h2>
-        <p className="mb-4">Buy crypto with local fiat (blockchain transaction).</p>
-        <select
-          value={cryptoType}
-          onChange={(e) => setCryptoType(e.target.value as 'ETH' | 'USDC' | 'USDT')}
-          className="w-full p-2 border rounded-lg mb-4"
-        >
-          <option value="ETH">Ethereum (ETH)</option>
-          <option value="USDC">USD Coin (USDC)</option>
-          <option value="USDT">Tether (USDT)</option>
-        </select>
+        <h2 className="text-xl font-bold mb-4">Purchase Credits</h2>
         <input
           type="number"
-          value={localPaymentAmount}
-          onChange={(e) => setLocalPaymentAmount(e.target.value)}
-          placeholder="Amount in ETH"
-          className="w-full p-2 border rounded-lg mb-4"
+          value={creditAmount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="Amount in Credits (1 credit = 0.01 ETH)"
+          className="border p-2 mr-2"
         />
-        <button onClick={handleLocalPayment} className="btn-primary w-full">
-          Purchase Crypto
+        <select
+          value={cryptoType}
+          onChange={(e) => setCryptoType(e.target.value as 'PTH' | 'USDC' | 'USDT')}
+          className="border p-2 mr-2"
+        >
+          <option value="PTH">PTH</option>
+          <option value="USDC">USDC</option>
+          <option value="USDT">USDT</option>
+        </select>
+        <button
+          onClick={handleCreditPurchase}
+          className="bg-primary text-white p-2 rounded"
+        >
+          Purchase Credits
         </button>
       </div>
-
       <div className="bg-white rounded-lg shadow-md p-6">
         <h2 className="text-xl font-bold mb-4">Transaction History</h2>
-        {transactions.length === 0 ? (
-          <p>No transactions yet.</p>
+        {transactions.length > 0 ? (
+          <ul>
+            {transactions.map((tx) => (
+              <li key={tx.tx_hash}>{`${tx.amount} ${tx.currency} - ${tx.status}`}</li>
+            ))}
+          </ul>
         ) : (
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b">
-                <th className="py-2">Type</th>
-                <th className="py-2">Amount</th>
-                <th className="py-2">Currency</th>
-                <th className="py-2">Status</th>
-                <th className="py-2">Date</th>
-                <th className="py-2">Tx Hash</th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((tx) => (
-                <tr key={tx.id} className="border-b">
-                  <td className="py-2">{tx.type}</td>
-                  <td className="py-2">{tx.amount}</td>
-                  <td className="py-2">{tx.currency}</td>
-                  <td className="py-2">{tx.status}</td>
-                  <td className="py-2">{new Date(tx.created_at).toLocaleDateString()}</td>
-                  <td className="py-2">{tx.tx_hash.slice(0, 8)}...</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <p>No transactions yet.</p>
         )}
       </div>
     </div>

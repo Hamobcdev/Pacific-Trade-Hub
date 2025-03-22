@@ -1,114 +1,92 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-
-interface UserProfile {
-  id?: string;
-  email: string;
-  kycStatus: boolean;
-  country: string;
-  walletAddress?: string;
-}
+import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
-  user: UserProfile | null;
-  fetchUserProfile: () => Promise<UserProfile | null>;
-  signOut: () => Promise<void>;
+  user: any;
+  isAuthenticated: boolean;
+  signInWithWallet: (address: string) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  fetchUserProfile: async () => null,
-  signOut: async () => {},
-});
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<UserProfile | null>(null);
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<any>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const fetchSession = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      console.log('Initial Session:', session, 'Error:', error);
-      if (error || !session?.user) {
-        console.error('Session fetch error:', error);
+    const fetchUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', data.user.email)
+          .single();
+        setUser({ ...data.user, ...profile });
+        setIsAuthenticated(true);
+      } else {
         setUser(null);
-        return;
+        setIsAuthenticated(false);
       }
-      const profile = await fetchUserProfile(session.user.email);
-      console.log('Initial Profile:', profile);
-      setUser({
-        id: session.user.id,
-        email: session.user.email || '',
-        kycStatus: profile?.kycStatus ?? false,
-        country: profile?.country ?? '',
-        walletAddress: profile?.walletAddress ?? '0x316100662368a392dC79C43AF4Adad0DFb3d74ef',
-      });
     };
+    fetchUser();
 
-    fetchSession();
-
-    const { data: subscription } = supabase.auth.onAuthStateChange(
-      async (_event: string, session: { user: any } | null) => {
-        console.log('Auth state changed:', _event, session);
-        if (session?.user) {
-          const profile = await fetchUserProfile(session.user.email);
-          console.log('Updated Profile:', profile);
-          setUser({
-            id: session.user.id,
-            email: session.user.email,
-            kycStatus: profile?.kycStatus ?? false,
-            country: profile?.country ?? '',
-            walletAddress: profile?.walletAddress ?? '0x316100662368a392dC79C43AF4Adad0DFb3d74ef',
-          });
-        } else {
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event: AuthChangeEvent, session: Session | null) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', session.user.email)
+            .single()
+            .then(({ data: profile }) => {
+              setUser({ ...session.user, ...profile });
+              setIsAuthenticated(true);
+            });
+        } else if (event === 'SIGNED_OUT') {
           setUser(null);
+          setIsAuthenticated(false);
+        } else if (event === 'INITIAL_SESSION' && session?.user) {
+          fetchUser();
         }
       }
     );
 
     return () => {
-      subscription.subscription.unsubscribe();
+      authListener.subscription.unsubscribe();
     };
   }, []);
 
-  const fetchUserProfile = async (email?: string): Promise<UserProfile | null> => {
-    const targetEmail = email || user?.email;
-    if (!targetEmail) {
-      console.log('No email to fetch profile for');
-      return null;
-    }
-
+  const signInWithWallet = async (address: string) => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('email, kyc_status, country')
-      .eq('email', targetEmail)
+      .upsert({ wallet_address: address, email: `${address}@pth.local` })
+      .select()
       .single();
-
-    if (error) {
-      console.error('Profile fetch error:', error);
-      return null;
-    }
-
-    if (data) {
-      return {
-        email: data.email,
-        kycStatus: data.kyc_status,
-        country: data.country || '',
-        walletAddress: '0x316100662368a392dC79C43AF4Adad0DFb3d74ef',
-      };
-    }
-    return null;
+    if (error) throw error;
+    setUser(data);
+    setIsAuthenticated(true);
   };
 
-  const signOut = async () => {
+  const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setIsAuthenticated(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, fetchUserProfile, signOut }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, signInWithWallet, logout }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
