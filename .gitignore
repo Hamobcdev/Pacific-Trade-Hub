@@ -27,3 +27,8 @@ dist-ssr
 .env.local
 contracts/keystore.json
 keystore.json
+keystore-*.json
+cache/
+out/
+src/pages/*
+keystore-*.json
